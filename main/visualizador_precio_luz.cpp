@@ -127,11 +127,11 @@ extern "C" void app_main(void)
 
     esp_timer_start_once(next_hour_timer, diff_to_next_hour * 1000000);
     esp_timer_start_once(next_midnight_timer, diff_to_next_midnight * 1000000);
-    // esp_timer_start_once(next_fetch_next_day_timer, diff_to_next_fetch_next_day * 1000000);
+    esp_timer_start_once(next_fetch_next_day_timer, diff_to_next_fetch_next_day * 1000000);
     
-    // if (tomorrow_available){
-    //     fetch_tomorrow_prices((void *)&state);
-    // }
+    if (tomorrow_available){
+        fetch_tomorrow_prices((void *)&state);
+    }
     
     display_init(state.display, state.today_prices_KWh);
 }
