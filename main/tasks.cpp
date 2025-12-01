@@ -51,7 +51,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
                 copy_len = MIN(evt->data_len, (MAX_HTTP_OUTPUT_BUFFER - output_len));
                 if (copy_len)
                 {
-                    memcpy(evt->user_data + output_len, evt->data, copy_len);
+                    memcpy((char *)evt->user_data + output_len, evt->data, copy_len);
                 }
             }
             else
@@ -67,7 +67,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt)
                 if (output_buffer == NULL)
                 {
                     // We initialize output_buffer with 0 because it is used by strlen() and similar functions therefore should be null terminated.
-                    output_buffer = (char *)calloc(MAX_HTTP_OUTPUT_BUFFER, sizeof(char));
+                    output_buffer = (char *)calloc(MAX_HTTP_OUTPUT_BUFFER + 1, sizeof(char));
                     output_len = 0;
                     if (output_buffer == NULL)
                     {
@@ -133,6 +133,63 @@ static tm get_current_time()
     return timeinfo;
 }
 
+static esp_err_t extract_values_from_json(double prices[24], const char *json_buffer){
+    cJSON *response = cJSON_Parse(json_buffer);
+    bool found = false;
+
+    if (response == NULL){
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    cJSON *included = cJSON_GetObjectItem(response, "included");
+
+    int price_type_quantity = cJSON_GetArraySize(included);
+    cJSON *price_type;
+
+    for (size_t i = 0; i < price_type_quantity; i++)
+    {
+        price_type = cJSON_GetArrayItem(included, i);
+
+        cJSON *type =  cJSON_GetObjectItem(price_type, "type");
+        if (cJSON_IsString(type) && !strcmp(type->valuestring, "PVPC")){
+            found = true;
+            break;
+        }
+    }
+
+    if (!found){
+        cJSON_Delete(response);
+        ESP_LOGE(TAG, "PVPC price not found in JSON");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    cJSON *attributes = cJSON_GetObjectItem(price_type, "attributes");
+    cJSON *values = cJSON_GetObjectItem(attributes, "values");
+    int valueCount = cJSON_GetArraySize(values);
+
+    if (valueCount != 24)
+    {
+        ESP_LOGE(TAG, "Expected 24 values, got %d", valueCount);
+    }
+    
+    for (size_t i = 0; i < 24; i++)
+    {
+        cJSON *valueObject = cJSON_GetArrayItem(values, i);
+        cJSON *value = cJSON_GetObjectItem(valueObject, "value");
+        if (!cJSON_IsNumber(value))
+        {
+            ESP_LOGE(TAG, "NOT A NUMBER");
+            cJSON_Delete(response);
+            return ESP_ERR_INVALID_ARG;
+        }
+
+        prices[i] = value->valuedouble / 1000;
+    }
+
+    cJSON_Delete(response);
+    return ESP_OK;
+}
+
 esp_err_t get_day_prices(tm *request_day, double result_buffer[24])
 {
     esp_err_t result = ESP_OK;
@@ -170,45 +227,11 @@ esp_err_t get_day_prices(tm *request_day, double result_buffer[24])
         ESP_LOGI(TAG, "Status = %d", esp_http_client_get_status_code(client));
     }
 
-    cJSON *response = cJSON_Parse(response_buffer);
-
-    cJSON *included = cJSON_GetObjectItem(response, "included");
-    cJSON *PVPC = cJSON_GetArrayItem(included, 0);
-    cJSON *attributes = cJSON_GetObjectItem(PVPC, "attributes");
-    cJSON *values = cJSON_GetObjectItem(attributes, "values");
-
-    int valueCount = cJSON_GetArraySize(values);
-
-    if (valueCount != 24)
-    {
-        ESP_LOGE(TAG, "Expected 24 values, got %d", valueCount);
+    if (extract_values_from_json(result_buffer, response_buffer) != ESP_OK){
+        result = ESP_ERR_INVALID_ARG;
     }
 
-    double sum = 0;
-    for (size_t i = 0; i < 24; i++)
-    {
-        cJSON *valueObject = cJSON_GetArrayItem(values, i);
-        cJSON *value = cJSON_GetObjectItem(valueObject, "value");
-        if (!cJSON_IsNumber(value))
-        {
-            ESP_LOGE(TAG, "NOT A NUMBER");
-            result = ESP_ERR_INVALID_ARG;
-            goto end;
-        }
-
-        result_buffer[i] = value->valuedouble / 1000;
-        sum += result_buffer[i];
-    }
-
-end:
-    if (response != NULL)
-    {
-        cJSON_Delete(response);
-    }
-    if (response_buffer != NULL)
-    {
-        free(response_buffer);
-    }
+    free(response_buffer);
     return result;
 }
 
@@ -227,8 +250,7 @@ void hourly_remove_rectangle(void *arg)
             .name = "periodic hourly_remove_rectangle",
         };
         esp_timer_create(&periodic_timer_args, &state->hourly_timer);
-        // esp_timer_start_periodic(*(state->hourly_timer), pdMS_TO_TICKS(60 * 60 * 1000));
-        esp_timer_start_periodic(state->hourly_timer, (60LL * 60 * 1000 * 1000));
+        esp_timer_start_periodic(state->hourly_timer, ((uint64_t)60 * 60 * 1000 * 1000));
     }
     else
     {
@@ -258,7 +280,7 @@ void nightly_update_screen(void *arg)
             .name = "periodic nightly_update_screen",
         };
         esp_timer_create(&periodic_timer_args, &state->nightly_timer);
-        esp_timer_start_periodic(state->nightly_timer, ((long long)24L * 60L * 60L * 1000L * 1000L));
+        esp_timer_start_periodic(state->nightly_timer, ((uint64_t)24 * 60 * 60 * 1000 * 1000));
     }
     else
     {
