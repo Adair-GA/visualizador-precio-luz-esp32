@@ -133,11 +133,13 @@ static tm get_current_time()
     return timeinfo;
 }
 
-static esp_err_t extract_values_from_json(double prices[24], const char *json_buffer){
+static esp_err_t extract_values_from_json(double prices[24], const char *json_buffer)
+{
     cJSON *response = cJSON_Parse(json_buffer);
     bool found = false;
 
-    if (response == NULL){
+    if (response == NULL)
+    {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -150,14 +152,16 @@ static esp_err_t extract_values_from_json(double prices[24], const char *json_bu
     {
         price_type = cJSON_GetArrayItem(included, i);
 
-        cJSON *type =  cJSON_GetObjectItem(price_type, "type");
-        if (cJSON_IsString(type) && !strcmp(type->valuestring, "PVPC")){
+        cJSON *type = cJSON_GetObjectItem(price_type, "type");
+        if (cJSON_IsString(type) && !strcmp(type->valuestring, "PVPC"))
+        {
             found = true;
             break;
         }
     }
 
-    if (!found){
+    if (!found)
+    {
         cJSON_Delete(response);
         ESP_LOGE(TAG, "PVPC price not found in JSON");
         return ESP_ERR_INVALID_ARG;
@@ -171,7 +175,7 @@ static esp_err_t extract_values_from_json(double prices[24], const char *json_bu
     {
         ESP_LOGE(TAG, "Expected 24 values, got %d", valueCount);
     }
-    
+
     for (size_t i = 0; i < 24; i++)
     {
         cJSON *valueObject = cJSON_GetArrayItem(values, i);
@@ -227,7 +231,8 @@ esp_err_t get_day_prices(tm *request_day, double result_buffer[24])
         ESP_LOGI(TAG, "Status = %d", esp_http_client_get_status_code(client));
     }
 
-    if (extract_values_from_json(result_buffer, response_buffer) != ESP_OK){
+    if (extract_values_from_json(result_buffer, response_buffer) != ESP_OK)
+    {
         result = ESP_ERR_INVALID_ARG;
     }
 
@@ -297,7 +302,10 @@ void nightly_update_screen(void *arg)
     }
     else
     {
-        get_day_prices(&now, state->today_prices_KWh);
+        if (get_day_prices(&now, state->today_prices_KWh) != ESP_OK)
+        {
+            display_no_data_warning(state->display, &now);
+        };
     }
 
     display_update(state->today_prices_KWh, &now, state->display);
@@ -336,7 +344,8 @@ void fetch_tomorrow_prices(void *arg)
     time_t t_next = mktime(&tomorrow_pre);
     localtime_r(&t_next, &tomorrow);
 
-    if(get_day_prices(&tomorrow, state->tomorrow_prices_KWh)){
+    if (get_day_prices(&tomorrow, state->tomorrow_prices_KWh))
+    {
         state->tomorrow_prices_available = true;
     }
 }

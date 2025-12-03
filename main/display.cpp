@@ -10,20 +10,17 @@ static const char *TAG = "Display controller";
 static void addDate(Epd *display, const tm *current_time)
 {
     char strftime_buf[64];
-    // ESP_LOGI(TAG, "Cursor x: %d, cursor y: %d", display->getCursorX(), display->getCursorY());
-    
-    // display->setCursor(120, 16);
-    // ESP_LOGI(TAG, "Cursor after move x: %d, cursor after move y: %d", display->getCursorX(), display->getCursorY());
+
     display->setTextColor(EPD_BLACK);
-    display->setFont(&Ubuntu_M16pt8b);
 
     strftime(strftime_buf, sizeof(strftime_buf), "%d/%m/%Y", current_time);
-    display->draw_centered_text(&Ubuntu_M16pt8b, 195, 8, 16, 16, strftime_buf);
+
+    display->draw_centered_text(&Ubuntu_M16pt8b, 0, 8, 400, 16, strftime_buf);
 }
 
-
-static double get_threshold(const double prices_KWh[24]){
-    double sum = 0, mean = 0;
+static double get_threshold(const double prices_KWh[24])
+{
+    double sum = 0;
 
     for (int i = 0; i < 24; i++)
     {
@@ -60,16 +57,25 @@ static void rectangles(Epd *display, const double prices_KWh[24], const tm *curr
     }
 }
 
+esp_err_t display_no_data_warning(Epd *display, const tm *time_info)
+{
+    display->fillScreen(EPD_WHITE);
+    addDate(display, time_info);
+    display->setTextColor(EPD_RED);
+    display->draw_centered_text(&Ubuntu_M16pt8b, 0, 150, 400, 16, "Sin datos disponibles");
+    display->setTextColor(EPD_WHITE);
+    display->update();
+    return ESP_OK;
+}
 
-
-esp_err_t display_update(const double prices_KWh[24], const tm *time_info, Epd *display){
+esp_err_t display_update(const double prices_KWh[24], const tm *time_info, Epd *display)
+{
     display->fillScreen(EPD_WHITE);
     addDate(display, time_info);
     rectangles(display, prices_KWh, time_info);
     display->update();
     return ESP_OK;
 }
-
 
 esp_err_t display_init(Epd *display, const double prices_KWh[24])
 {
